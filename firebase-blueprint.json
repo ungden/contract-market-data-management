@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "sale_admin", "market_staff", "manager"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "ContractTemplate": {
+      "title": "ContractTemplate",
+      "description": "Template definition for generating contracts",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "fieldsJson": { "type": "string", "description": "Stringified JSON array of field definitions" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "fieldsJson"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Generated contract record",
+      "type": "object",
+      "properties": {
+        "contractNo": { "type": "string" },
+        "templateId": { "type": "string" },
+        "templateName": { "type": "string" },
+        "companyName": { "type": "string" },
+        "dataJson": { "type": "string", "description": "Stringified JSON of entered field data" },
+        "createdBy": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["draft", "completed", "cancelled"] }
+      },
+      "required": ["contractNo", "templateId", "companyName", "dataJson", "createdBy", "createdAt", "status"]
+    },
+    "MarketVisit": {
+      "title": "MarketVisit",
+      "description": "Record of a market visit by staff",
+      "type": "object",
+      "properties": {
+        "staffId": { "type": "string" },
+        "staffName": { "type": "string" },
+        "visitDate": { "type": "string", "format": "date-time" },
+        "area": { "type": "string" },
+        "shopName": { "type": "string" },
+        "address": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "notes": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "gpsLat": { "type": "number" },
+        "gpsLng": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["staffId", "staffName", "visitDate", "shopName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/contract_templates/{templateId}": {
+      "schema": "ContractTemplate",
+      "description": "Contract templates"
+    },
+    "/contracts/{contractId}": {
+      "schema": "Contract",
+      "description": "Generated contracts"
+    },
+    "/market_visits/{visitId}": {
+      "schema": "MarketVisit",
+      "description": "Market visit records"
+    }
+  }
+}

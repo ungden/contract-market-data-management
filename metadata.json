@@ -1,0 +1,5 @@
+{
+  "name": "Contract & Market Data Management",
+  "description": "A web app to generate Word contracts from templates and record market visit data for staff.",
+  "requestFramePermissions": ["geolocation", "camera"]
+}
