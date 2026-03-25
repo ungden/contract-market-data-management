@@ -1,201 +1,262 @@
-"use client";
+"use client"
 
-import { useAuth } from "@/components/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { db } from "@/firebase";
-import { collection, getDocs, query, orderBy, where, deleteDoc, doc } from "firebase/firestore";
-import { FileDown, FileText, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
-
-interface Contract {
-  id: string;
-  contractNo: string;
-  templateName: string;
-  companyName: string;
-  status: string;
-  createdAt: any;
-  createdBy: string;
-  creatorName: string;
-  dataJson: string;
-}
+import { useEffect, useState } from "react"
+import { useAuth } from "@/components/auth-provider"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import {
+  getContracts,
+  deleteContract,
+  duplicateContract,
+} from "@/lib/database"
+import { generateContractDocx } from "@/lib/docx-generator"
+import { useToast } from "@/components/ui/sonner"
+import { PageLoading } from "@/components/loading-spinner"
+import { labels } from "@/lib/i18n"
+import type { Contract } from "@/lib/types"
+import {
+  Plus,
+  Trash2,
+  FileDown,
+  Copy,
+  Search,
+  Download,
+  Eye,
+} from "lucide-react"
+import Link from "next/link"
+import * as XLSX from "xlsx"
+import { saveAs } from "file-saver"
 
 export default function ContractsPage() {
-  const { profile } = useAuth();
-  const [contracts, setContracts] = useState<Contract[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchContracts = async () => {
-    if (!profile) return;
-    try {
-      let q = query(collection(db, "contracts"), orderBy("createdAt", "desc"));
-      if (profile.role === "market_staff") {
-        q = query(collection(db, "contracts"), where("createdBy", "==", profile.uid), orderBy("createdAt", "desc"));
-      }
-      const snap = await getDocs(q);
-      const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Contract));
-      setContracts(data);
-    } catch (error) {
-      console.error("Error fetching contracts:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { profile } = useAuth()
+  const { toast } = useToast()
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
 
   useEffect(() => {
-    fetchContracts();
-  }, [profile]);
+    loadContracts()
+  }, [])
+
+  const loadContracts = async () => {
+    try {
+      const data = await getContracts()
+      setContracts(data)
+    } catch {
+      toast(labels.messages.loadError, "error")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this contract?")) return;
+    if (!confirm(labels.messages.deleteConfirm)) return
     try {
-      await deleteDoc(doc(db, "contracts", id));
-      fetchContracts();
-    } catch (error) {
-      console.error("Error deleting contract:", error);
+      await deleteContract(id)
+      setContracts((prev) => prev.filter((c) => c.id !== id))
+      toast(labels.messages.deleteSuccess)
+    } catch {
+      toast(labels.messages.deleteError, "error")
     }
-  };
+  }
 
-  const downloadWord = async (contract: Contract) => {
+  const handleDuplicate = async (id: string) => {
     try {
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import("docx");
-      const { saveAs } = await import("file-saver");
-      
-      const data = JSON.parse(contract.dataJson || "{}");
-      
-      // Basic document generation
-      const doc = new Document({
-        sections: [
-          {
-            properties: {},
-            children: [
-              new Paragraph({
-                text: contract.templateName.toUpperCase(),
-                heading: HeadingLevel.HEADING_1,
-                alignment: "center",
-              }),
-              new Paragraph({
-                text: `Contract No: ${contract.contractNo}`,
-                alignment: "center",
-                spacing: { after: 400 },
-              }),
-              ...Object.entries(data).map(([key, value]) => {
-                return new Paragraph({
-                  children: [
-                    new TextRun({ text: `${key}: `, bold: true }),
-                    new TextRun({ text: String(value) }),
-                  ],
-                  spacing: { after: 200 },
-                });
-              }),
-              new Paragraph({
-                text: "Signatures",
-                heading: HeadingLevel.HEADING_2,
-                spacing: { before: 800, after: 400 },
-              }),
-              new Paragraph({
-                children: [
-                  new TextRun({ text: "Party A", bold: true }),
-                  new TextRun({ text: "\t\t\t\t\t\t" }),
-                  new TextRun({ text: "Party B", bold: true }),
-                ],
-              }),
-            ],
-          },
-        ],
-      });
-
-      const blob = await Packer.toBlob(doc);
-      saveAs(blob, `${contract.contractNo}_${contract.companyName}.docx`);
-    } catch (error) {
-      console.error("Error generating docx:", error);
-      alert("Failed to generate Word document.");
+      await duplicateContract(id)
+      toast("Sao chép hợp đồng thành công")
+      loadContracts()
+    } catch {
+      toast("Sao chép hợp đồng thất bại", "error")
     }
-  };
+  }
 
-  if (!profile) return null;
+  const handleDownloadWord = async (contract: Contract) => {
+    try {
+      await generateContractDocx(contract)
+      toast(labels.messages.exportSuccess)
+    } catch {
+      toast("Tạo file Word thất bại", "error")
+    }
+  }
+
+  const handleExport = () => {
+    const exportData = filtered.map((c) => ({
+      "Số HĐ": c.contract_no,
+      "Khách hàng": c.customer_name,
+      "Công ty": c.company_name,
+      "Mẫu HĐ": c.template_name,
+      "Trạng thái": labels.status[c.status],
+      "Người tạo": c.creator_name,
+      "Ngày tạo": new Date(c.created_at).toLocaleDateString("vi-VN"),
+    }))
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Hợp đồng")
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" })
+    saveAs(new Blob([buf]), "hop-dong.xlsx")
+    toast(labels.messages.exportSuccess)
+  }
+
+  const filtered = contracts.filter((c) => {
+    const matchSearch =
+      c.contract_no.toLowerCase().includes(search.toLowerCase()) ||
+      c.customer_name.toLowerCase().includes(search.toLowerCase()) ||
+      c.company_name.toLowerCase().includes(search.toLowerCase())
+    const matchStatus =
+      statusFilter === "all" || c.status === statusFilter
+    return matchSearch && matchStatus
+  })
+
+  const canManage =
+    profile?.role === "admin" || profile?.role === "sale_admin"
+
+  if (loading) return <PageLoading />
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contracts</h1>
-          <p className="text-slate-500">Manage and generate contracts.</p>
-        </div>
-        {(profile.role === "super_admin" || profile.role === "sale_admin") && (
-          <Link href="/contracts/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              New Contract
+        <h1 className="text-2xl font-bold">{labels.pages.contracts}</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="mr-2 h-4 w-4" />
+            {labels.buttons.export}
+          </Button>
+          {canManage && (
+            <Button render={<Link href="/contracts/new" />}>
+                <Plus className="mr-2 h-4 w-4" />
+                {labels.buttons.add}
             </Button>
-          </Link>
-        )}
+          )}
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
+      <div className="flex gap-4">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm theo số HĐ, tên KH..."
+            className="pl-9"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => v && setStatusFilter(v)}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Trạng thái" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tất cả</SelectItem>
+            <SelectItem value="draft">{labels.status.draft}</SelectItem>
+            <SelectItem value="active">{labels.status.active}</SelectItem>
+            <SelectItem value="completed">
+              {labels.status.completed}
+            </SelectItem>
+            <SelectItem value="cancelled">
+              {labels.status.cancelled}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="py-8 text-center text-muted-foreground">
+          {labels.messages.noData}
+        </p>
+      ) : (
+        <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Contract No</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Template</TableHead>
-                <TableHead>Created By</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{labels.form.contractNo}</TableHead>
+                <TableHead>{labels.form.customer}</TableHead>
+                <TableHead>{labels.form.templateName}</TableHead>
+                <TableHead>{labels.form.createdBy}</TableHead>
+                <TableHead>{labels.form.createdAt}</TableHead>
+                <TableHead>{labels.form.status}</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                    Loading contracts...
+              {filtered.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/contracts/${c.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {c.contract_no}
+                    </Link>
                   </TableCell>
-                </TableRow>
-              ) : contracts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                    No contracts found.
+                  <TableCell>{c.customer_name || c.company_name}</TableCell>
+                  <TableCell>{c.template_name}</TableCell>
+                  <TableCell>{c.creator_name}</TableCell>
+                  <TableCell>
+                    {new Date(c.created_at).toLocaleDateString("vi-VN")}
                   </TableCell>
-                </TableRow>
-              ) : (
-                contracts.map((contract) => (
-                  <TableRow key={contract.id}>
-                    <TableCell className="font-medium">{contract.contractNo}</TableCell>
-                    <TableCell>{contract.companyName}</TableCell>
-                    <TableCell>{contract.templateName}</TableCell>
-                    <TableCell>{contract.creatorName}</TableCell>
-                    <TableCell>
-                      {contract.createdAt?.toDate ? format(contract.createdAt.toDate(), "MMM dd, yyyy") : "N/A"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={contract.status === "completed" ? "default" : "secondary"}>
-                        {contract.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => downloadWord(contract)}>
-                        <FileDown className="mr-2 h-4 w-4" />
-                        Word
+                  <TableCell>
+                    <Badge
+                      variant={
+                        c.status === "active" ? "default" : "secondary"
+                      }
+                    >
+                      {labels.status[c.status]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" render={<Link href={`/contracts/${c.id}`} />}>
+                          <Eye className="h-4 w-4" />
                       </Button>
-                      {(profile.role === "super_admin" || profile.role === "sale_admin") && (
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(contract.id)}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDownloadWord(c)}
+                      >
+                        <FileDown className="h-4 w-4" />
+                      </Button>
+                      {canManage && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDuplicate(c.id)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(c.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
                       )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
-  );
+  )
 }

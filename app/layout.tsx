@@ -1,25 +1,29 @@
-import type {Metadata} from 'next';
-import './globals.css';
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
-import { AuthProvider } from '@/components/auth-provider';
-import { LayoutWrapper } from '@/components/layout-wrapper';
-
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+import type { Metadata } from "next"
+import "./globals.css"
+import { AuthProvider } from "@/components/auth-provider"
+import { LayoutWrapper } from "@/components/layout-wrapper"
+import { ToastProvider } from "@/components/ui/sonner"
 
 export const metadata: Metadata = {
-  title: 'Contract & Market Data Management',
-  description: 'A web app to generate Word contracts from templates and record market visit data for staff.',
-};
+  title: "Quản lý Hợp đồng & Thị trường",
+  description:
+    "Hệ thống quản lý hợp đồng thương mại và dữ liệu viếng thăm thị trường.",
+}
 
-export default function RootLayout({children}: {children: React.ReactNode}) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="vi" className="font-sans">
       <body suppressHydrationWarning>
         <AuthProvider>
-          <LayoutWrapper>{children}</LayoutWrapper>
+          <ToastProvider>
+            <LayoutWrapper>{children}</LayoutWrapper>
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>
-  );
+  )
 }

@@ -1,167 +1,275 @@
-"use client";
+"use client"
 
-import { useAuth } from "@/components/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { db } from "@/firebase";
-import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-
-interface TemplateField {
-  name: string;
-  label: string;
-  type: string;
-}
-
-interface Template {
-  id: string;
-  name: string;
-  fieldsJson: string;
-}
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useAuth } from "@/components/auth-provider"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { CustomerSelect } from "@/components/customer-select"
+import {
+  getTemplates,
+  addContract,
+  getNextContractNumber,
+} from "@/lib/database"
+import { useToast } from "@/components/ui/sonner"
+import { PageLoading } from "@/components/loading-spinner"
+import { labels } from "@/lib/i18n"
+import type { ContractTemplate, TemplateField, Customer } from "@/lib/types"
+import { ArrowLeft } from "lucide-react"
+import Link from "next/link"
 
 export default function NewContractPage() {
-  const { profile } = useAuth();
-  const router = useRouter();
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
-  const [fields, setFields] = useState<TemplateField[]>([]);
-  const [formData, setFormData] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
+  const { profile } = useAuth()
+  const router = useRouter()
+  const { toast } = useToast()
+  const [templates, setTemplates] = useState<ContractTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<ContractTemplate | null>(null)
+  const [fields, setFields] = useState<TemplateField[]>([])
+  const [formData, setFormData] = useState<Record<string, string>>({})
+  const [contractNo, setContractNo] = useState("")
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
+    null
+  )
+  const [companyName, setCompanyName] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [step, setStep] = useState(1)
 
-  // Core fields
-  const [contractNo, setContractNo] = useState("");
-  const [companyName, setCompanyName] = useState("");
+  const canManage =
+    profile?.role === "admin" || profile?.role === "sale_admin"
 
   useEffect(() => {
-    async function fetchTemplates() {
-      const snap = await getDocs(collection(db, "contract_templates"));
-      const data = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Template));
-      setTemplates(data);
-    }
-    fetchTemplates();
-  }, []);
+    loadTemplates()
+  }, [])
 
-  const handleTemplateChange = (templateId: string) => {
-    const template = templates.find((t) => t.id === templateId);
-    if (template) {
-      setSelectedTemplate(template);
-      try {
-        const parsedFields = JSON.parse(template.fieldsJson || "[]");
-        setFields(parsedFields);
-        // Reset form data
-        const initialData: Record<string, string> = {};
-        parsedFields.forEach((f: TemplateField) => {
-          initialData[f.name] = "";
-        });
-        setFormData(initialData);
-      } catch (error) {
-        console.error("Error parsing fields", error);
-      }
-    } else {
-      setSelectedTemplate(null);
-      setFields([]);
-    }
-  };
-
-  const handleFieldChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!profile || !selectedTemplate) return;
-
-    setLoading(true);
+  const loadTemplates = async () => {
     try {
-      await addDoc(collection(db, "contracts"), {
-        contractNo,
-        templateId: selectedTemplate.id,
-        templateName: selectedTemplate.name,
-        companyName,
-        dataJson: JSON.stringify(formData),
-        createdBy: profile.uid,
-        creatorName: profile.displayName,
-        createdAt: serverTimestamp(),
-        status: "completed",
-      });
-      router.push("/contracts");
-    } catch (error) {
-      console.error("Error creating contract:", error);
-      alert("Failed to create contract.");
+      const data = await getTemplates()
+      setTemplates(data)
+    } catch {
+      toast(labels.messages.loadError, "error")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
-
-  if (!profile || (profile.role !== "super_admin" && profile.role !== "sale_admin")) {
-    return <div>Access Denied</div>;
   }
+
+  const handleTemplateSelect = async (templateId: string | null) => {
+    if (!templateId) return
+    const template = templates.find((t) => t.id === templateId)
+    if (!template) return
+
+    setSelectedTemplate(template)
+    try {
+      const parsedFields: TemplateField[] = JSON.parse(
+        template.fields_json || "[]"
+      )
+      setFields(parsedFields)
+      const initial: Record<string, string> = {}
+      parsedFields.forEach((f) => (initial[f.name] = ""))
+      setFormData(initial)
+    } catch {
+      setFields([])
+    }
+
+    // Auto-generate contract number
+    const year = new Date().getFullYear()
+    try {
+      const num = await getNextContractNumber(year)
+      setContractNo(`HD/VIM/${year}/${String(num).padStart(3, "0")}`)
+    } catch {
+      setContractNo("")
+    }
+  }
+
+  const handleCustomerSelect = (customer: Customer | null) => {
+    setSelectedCustomer(customer)
+    if (customer) {
+      setCompanyName(customer.name)
+    }
+  }
+
+  const handleSubmit = async () => {
+    if (!profile || !selectedTemplate) return
+
+    if (!contractNo || !companyName) {
+      toast("Vui lòng điền đầy đủ thông tin", "error")
+      return
+    }
+
+    setSaving(true)
+    try {
+      const contract = await addContract({
+        contract_no: contractNo,
+        template_id: selectedTemplate.id,
+        template_name: selectedTemplate.name,
+        customer_id: selectedCustomer?.id || null,
+        customer_name: selectedCustomer?.name || companyName,
+        company_name: companyName,
+        data_json: JSON.stringify(formData),
+        year: new Date().getFullYear(),
+        status: "draft",
+        created_by: profile.id,
+        creator_name: profile.display_name,
+      })
+      toast(labels.messages.saveSuccess)
+      router.push(`/contracts/${contract.id}`)
+    } catch {
+      toast(labels.messages.saveError, "error")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!canManage) {
+    return (
+      <div className="flex h-[50vh] items-center justify-center">
+        <p className="text-muted-foreground">{labels.messages.noAccess}</p>
+      </div>
+    )
+  }
+
+  if (loading) return <PageLoading />
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Create New Contract</h1>
-        <p className="text-slate-500">Fill in the details to generate a new contract.</p>
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" render={<Link href="/contracts" />}>
+            <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <h1 className="text-2xl font-bold">{labels.pages.newContract}</h1>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Contract Details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="template">Select Template</Label>
-                <select
-                  id="template"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  onChange={(e) => handleTemplateChange(e.target.value)}
-                  required
-                >
-                  <option value="">-- Select a template --</option>
+      {/* Step indicators */}
+      <div className="flex gap-2">
+        {[1, 2, 3].map((s) => (
+          <div
+            key={s}
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
+              step >= s
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            }`}
+          >
+            {s}
+          </div>
+        ))}
+      </div>
+
+      {/* Step 1: Choose customer */}
+      {step === 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bước 1: Chọn khách hàng</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <CustomerSelect
+              selectedCustomer={selectedCustomer}
+              onSelect={handleCustomerSelect}
+            />
+            <div>
+              <Label>{labels.form.companyName}</Label>
+              <Input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="Tên công ty đối tác"
+              />
+            </div>
+            <Button
+              onClick={() => setStep(2)}
+              disabled={!companyName}
+              className="w-full"
+            >
+              Tiếp theo
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 2: Choose template & fill fields */}
+      {step === 2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bước 2: Chọn mẫu & điền thông tin</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label>{labels.form.templateName}</Label>
+              <Select onValueChange={handleTemplateSelect}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Chọn mẫu hợp đồng" />
+                </SelectTrigger>
+                <SelectContent>
                   {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
+                    <SelectItem key={t.id} value={t.id}>
                       {t.name}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contractNo">Contract Number</Label>
-                <Input id="contractNo" value={contractNo} onChange={(e) => setContractNo(e.target.value)} required />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="companyName">Company Name (Partner)</Label>
-                <Input id="companyName" value={companyName} onChange={(e) => setCompanyName(e.target.value)} required />
-              </div>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>{labels.form.contractNo}</Label>
+              <Input
+                value={contractNo}
+                onChange={(e) => setContractNo(e.target.value)}
+                placeholder="HD/VIM/2026/001"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tự động tạo, có thể chỉnh sửa
+              </p>
             </div>
 
             {fields.length > 0 && (
-              <div className="space-y-4 rounded-md border p-4 bg-slate-50">
-                <h3 className="font-medium text-lg">Dynamic Fields</h3>
+              <div className="space-y-4 rounded-md border bg-muted/30 p-4">
+                <h3 className="font-medium">Thông tin hợp đồng</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   {fields.map((field) => (
-                    <div key={field.name} className={`space-y-2 ${field.type === "textarea" ? "md:col-span-2" : ""}`}>
-                      <Label htmlFor={field.name}>{field.label}</Label>
+                    <div
+                      key={field.name}
+                      className={
+                        field.type === "textarea" ? "md:col-span-2" : ""
+                      }
+                    >
+                      <Label>{field.label}</Label>
                       {field.type === "textarea" ? (
                         <Textarea
-                          id={field.name}
                           value={formData[field.name] || ""}
-                          onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                          required
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              [field.name]: e.target.value,
+                            })
+                          }
                         />
                       ) : (
                         <Input
-                          id={field.name}
-                          type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+                          type={
+                            field.type === "date"
+                              ? "date"
+                              : field.type === "number"
+                                ? "number"
+                                : "text"
+                          }
                           value={formData[field.name] || ""}
-                          onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                          required
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              [field.name]: e.target.value,
+                            })
+                          }
                         />
                       )}
                     </div>
@@ -170,17 +278,101 @@ export default function NewContractPage() {
               </div>
             )}
 
-            <div className="flex justify-end space-x-4">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
-                Cancel
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setStep(1)}>
+                {labels.buttons.back}
               </Button>
-              <Button type="submit" disabled={loading || !selectedTemplate}>
-                {loading ? "Generating..." : "Generate & Save"}
+              <Button
+                onClick={() => setStep(3)}
+                disabled={!selectedTemplate}
+                className="flex-1"
+              >
+                {labels.buttons.preview}
               </Button>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 3: Preview */}
+      {step === 3 && selectedTemplate && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bước 3: Xem trước & Lưu</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border p-4 space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">
+                    {labels.form.contractNo}:
+                  </span>{" "}
+                  <strong>{contractNo}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    {labels.form.templateName}:
+                  </span>{" "}
+                  <strong>{selectedTemplate.name}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    {labels.form.customer}:
+                  </span>{" "}
+                  <strong>
+                    {selectedCustomer?.name || companyName}
+                  </strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">
+                    {labels.form.status}:
+                  </span>{" "}
+                  <Badge variant="secondary">{labels.status.draft}</Badge>
+                </div>
+              </div>
+
+              {Object.entries(formData).length > 0 && (
+                <>
+                  <hr className="my-2" />
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {Object.entries(formData).map(([key, value]) => {
+                      const field = fields.find((f) => f.name === key)
+                      return (
+                        <div
+                          key={key}
+                          className={
+                            field?.type === "textarea"
+                              ? "col-span-2"
+                              : ""
+                          }
+                        >
+                          <span className="text-muted-foreground">
+                            {field?.label || key}:
+                          </span>{" "}
+                          <strong>{value || "-"}</strong>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setStep(2)}>
+                Quay lại sửa
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                disabled={saving}
+                className="flex-1"
+              >
+                {saving ? "Đang lưu..." : "Xác nhận & Lưu"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
-  );
+  )
 }

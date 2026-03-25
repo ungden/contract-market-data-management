@@ -1,111 +1,225 @@
-"use client";
+"use client"
 
-import { useAuth } from "@/components/auth-provider";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, MapPin, Users, TrendingUp, Settings } from "lucide-react";
-import { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/firebase";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react"
+import { useAuth } from "@/components/auth-provider"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import {
+  getDashboardStats,
+  getRecentContracts,
+  getRecentVisits,
+} from "@/lib/database"
+import { PageLoading } from "@/components/loading-spinner"
+import { labels } from "@/lib/i18n"
+import type { Contract, MarketVisit } from "@/lib/types"
+import {
+  FileText,
+  MapPin,
+  Settings,
+  Building2,
+  Package,
+} from "lucide-react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function DashboardPage() {
-  const { profile, loading } = useAuth();
-  const router = useRouter();
+  const { profile, loading: authLoading } = useAuth()
+  const router = useRouter()
   const [stats, setStats] = useState({
     contracts: 0,
     visits: 0,
     templates: 0,
-  });
+    customers: 0,
+    products: 0,
+  })
+  const [recentContracts, setRecentContracts] = useState<Contract[]>([])
+  const [recentVisits, setRecentVisits] = useState<MarketVisit[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!loading && !profile) {
-      router.push("/login");
+    if (!authLoading && !profile) {
+      router.push("/login")
     }
-  }, [profile, loading, router]);
+  }, [profile, authLoading, router])
 
   useEffect(() => {
-    async function fetchStats() {
-      if (!profile) return;
+    if (!profile) return
+    loadDashboard()
+  }, [profile])
 
-      try {
-        // Fetch contracts count
-        let contractsQuery = collection(db, "contracts");
-        if (profile.role === "market_staff") {
-          // Market staff shouldn't see this, but just in case
-          contractsQuery = query(collection(db, "contracts"), where("createdBy", "==", profile.uid)) as any;
-        }
-        const contractsSnap = await getDocs(contractsQuery);
-        
-        // Fetch visits count
-        let visitsQuery = collection(db, "market_visits");
-        if (profile.role === "market_staff") {
-          visitsQuery = query(collection(db, "market_visits"), where("staffId", "==", profile.uid)) as any;
-        }
-        const visitsSnap = await getDocs(visitsQuery);
-
-        // Fetch templates count
-        const templatesSnap = await getDocs(collection(db, "contract_templates"));
-
-        setStats({
-          contracts: contractsSnap.size,
-          visits: visitsSnap.size,
-          templates: templatesSnap.size,
-        });
-      } catch (error) {
-        console.error("Error fetching stats:", error);
-      }
+  const loadDashboard = async () => {
+    try {
+      const [s, rc, rv] = await Promise.all([
+        getDashboardStats(),
+        getRecentContracts(5),
+        getRecentVisits(5),
+      ])
+      setStats(s)
+      setRecentContracts(rc)
+      setRecentVisits(rv)
+    } catch (err) {
+      console.error("Dashboard load error:", err)
+    } finally {
+      setLoading(false)
     }
+  }
 
-    fetchStats();
-  }, [profile]);
+  if (authLoading || !profile) return null
+  if (loading) return <PageLoading />
 
-  if (loading || !profile) return null;
+  const statCards = [
+    {
+      title: "Hợp đồng",
+      value: stats.contracts,
+      icon: FileText,
+      roles: ["admin", "sale_admin"],
+    },
+    {
+      title: "Viếng thăm",
+      value: stats.visits,
+      icon: MapPin,
+      roles: ["admin", "sale_admin", "market_staff"],
+    },
+    {
+      title: "Mẫu HĐ",
+      value: stats.templates,
+      icon: Settings,
+      roles: ["admin", "sale_admin"],
+    },
+    {
+      title: "Khách hàng",
+      value: stats.customers,
+      icon: Building2,
+      roles: ["admin", "sale_admin", "market_staff"],
+    },
+    {
+      title: "Sản phẩm",
+      value: stats.products,
+      icon: Package,
+      roles: ["admin", "sale_admin"],
+    },
+  ]
+
+  const visibleCards = statCards.filter((c) =>
+    c.roles.includes(profile.role)
+  )
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-slate-500">Welcome back, {profile.displayName}</p>
+        <h1 className="text-2xl font-bold">{labels.pages.dashboard}</h1>
+        <p className="text-muted-foreground">
+          Xin chào, {profile.display_name}
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {(profile.role === "super_admin" || profile.role === "sale_admin" || profile.role === "manager") && (
-          <Card>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {visibleCards.map((card) => (
+          <Card key={card.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Contracts</CardTitle>
-              <FileText className="h-4 w-4 text-slate-500" />
+              <CardTitle className="text-sm font-medium">
+                {card.title}
+              </CardTitle>
+              <card.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.contracts}</div>
-              <p className="text-xs text-slate-500">Generated contracts</p>
+              <div className="text-2xl font-bold">{card.value}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Recent contracts */}
+        {(profile.role === "admin" || profile.role === "sale_admin") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                Hợp đồng gần đây
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentContracts.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Chưa có hợp đồng
+                </p>
+              ) : (
+                <Table>
+                  <TableBody>
+                    {recentContracts.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell>
+                          <Link
+                            href={`/contracts/${c.id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {c.contract_no}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="max-w-[120px] truncate">
+                          {c.customer_name || c.company_name}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-xs">
+                            {labels.status[c.status]}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         )}
 
+        {/* Recent visits */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Market Visits</CardTitle>
-            <MapPin className="h-4 w-4 text-slate-500" />
+          <CardHeader>
+            <CardTitle className="text-base">
+              Viếng thăm gần đây
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.visits}</div>
-            <p className="text-xs text-slate-500">Recorded visits</p>
+            {recentVisits.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Chưa có lượt viếng thăm
+              </p>
+            ) : (
+              <Table>
+                <TableBody>
+                  {recentVisits.map((v) => (
+                    <TableRow key={v.id}>
+                      <TableCell>
+                        <Link
+                          href={`/market-visits/${v.id}`}
+                          className="text-primary hover:underline"
+                        >
+                          {v.customer_name || v.shop_name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{v.staff_name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(v.visit_date).toLocaleDateString(
+                          "vi-VN"
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
-
-        {(profile.role === "super_admin" || profile.role === "sale_admin") && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Templates</CardTitle>
-              <Settings className="h-4 w-4 text-slate-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.templates}</div>
-              <p className="text-xs text-slate-500">Available for generation</p>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
-  );
+  )
 }
