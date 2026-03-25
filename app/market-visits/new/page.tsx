@@ -191,6 +191,34 @@ export default function NewMarketVisitPage() {
                 onChange={(e) => setAddress(e.target.value)}
               />
             </div>
+
+            {/* GPS - prominent for field workers */}
+            <div className={`flex items-center gap-3 rounded-lg border p-3 ${gps ? "border-green-200 bg-green-50" : "bg-muted/30"}`}>
+              <Button
+                type="button"
+                variant={gps ? "outline" : "default"}
+                size="sm"
+                onClick={handleGetLocation}
+                disabled={gpsLoading}
+                className="shrink-0"
+              >
+                {gpsLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <MapPin className="mr-2 h-4 w-4" />
+                )}
+                {gps ? "Cập nhật GPS" : "Lấy vị trí GPS"}
+              </Button>
+              {gps ? (
+                <span className="text-sm text-green-700">
+                  {gps.lat.toFixed(6)}, {gps.lng.toFixed(6)}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  Nhấn để ghi nhận vị trí hiện tại
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -273,10 +301,10 @@ export default function NewMarketVisitPage() {
           </CardContent>
         </Card>
 
-        {/* Notes, photos, GPS */}
+        {/* Notes & photos */}
         <Card>
           <CardHeader>
-            <CardTitle>Thông tin thêm</CardTitle>
+            <CardTitle>Ghi chú & Hình ảnh</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -333,36 +361,12 @@ export default function NewMarketVisitPage() {
               )}
             </div>
 
-            <div className="rounded-md border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
-                <Label>{labels.form.gpsLocation}</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGetLocation}
-                  disabled={gpsLoading}
-                >
-                  {gpsLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <MapPin className="mr-2 h-4 w-4" />
-                  )}
-                  {gps ? "Cập nhật vị trí" : labels.buttons.getLocation}
-                </Button>
-              </div>
-              {gps && (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Lat: {gps.lat.toFixed(6)}, Lng: {gps.lng.toFixed(6)}
-                </p>
-              )}
-            </div>
           </CardContent>
         </Card>
 
         <div className="flex gap-2">
           <Button type="submit" disabled={saving || !shopName} className="flex-1">
-            {saving ? "Đang lưu..." : labels.buttons.save}
+            {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang lưu...</> : labels.buttons.save}
           </Button>
           <Button type="button" variant="outline" render={<Link href="/market-visits" />}>
             {labels.buttons.cancel}

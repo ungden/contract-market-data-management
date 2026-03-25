@@ -11,7 +11,7 @@ import { addCustomer } from "@/lib/database"
 import { customerSchema } from "@/lib/schemas"
 import { useToast } from "@/components/ui/sonner"
 import { labels } from "@/lib/i18n"
-import { ArrowLeft, MapPin } from "lucide-react"
+import { ArrowLeft, MapPin, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 export default function NewCustomerPage() {
@@ -191,7 +191,7 @@ export default function NewCustomerPage() {
 
         <div className="flex gap-2 pt-4">
           <Button type="submit" disabled={saving}>
-            {saving ? "Đang lưu..." : labels.buttons.save}
+            {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang lưu...</> : labels.buttons.save}
           </Button>
           <Button type="button" variant="outline" render={<Link href="/customers" />}>
             {labels.buttons.cancel}

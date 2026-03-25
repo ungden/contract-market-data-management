@@ -26,7 +26,7 @@ import { useToast } from "@/components/ui/sonner"
 import { PageLoading } from "@/components/loading-spinner"
 import { labels } from "@/lib/i18n"
 import type { ContractTemplate, TemplateField } from "@/lib/types"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Loader2 } from "lucide-react"
 
 export default function TemplatesPage() {
   const { profile } = useAuth()
@@ -238,7 +238,7 @@ export default function TemplatesPage() {
               </div>
 
               <Button type="submit" disabled={saving} className="w-full">
-                {saving ? "Đang lưu..." : labels.buttons.save}
+                {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang lưu...</> : labels.buttons.save}
               </Button>
             </form>
           </DialogContent>

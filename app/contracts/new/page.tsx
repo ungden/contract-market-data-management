@@ -26,7 +26,7 @@ import { useToast } from "@/components/ui/sonner"
 import { PageLoading } from "@/components/loading-spinner"
 import { labels } from "@/lib/i18n"
 import type { ContractTemplate, TemplateField, Customer } from "@/lib/types"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 export default function NewContractPage() {
@@ -151,18 +151,39 @@ export default function NewContractPage() {
         <h1 className="text-2xl font-bold">{labels.pages.newContract}</h1>
       </div>
 
-      {/* Step indicators */}
-      <div className="flex gap-2">
-        {[1, 2, 3].map((s) => (
-          <div
-            key={s}
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${
-              step >= s
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-            }`}
-          >
-            {s}
+      {/* Step indicators - clickable */}
+      <div className="flex gap-1 items-center">
+        {[
+          { n: 1, label: "Khách hàng" },
+          { n: 2, label: "Thông tin" },
+          { n: 3, label: "Xác nhận" },
+        ].map((s, i) => (
+          <div key={s.n} className="flex items-center">
+            {i > 0 && (
+              <div
+                className={`h-0.5 w-6 sm:w-10 ${step >= s.n ? "bg-primary" : "bg-muted"}`}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (s.n < step) setStep(s.n)
+                if (s.n === 2 && companyName) setStep(2)
+                if (s.n === 3 && selectedTemplate && companyName) setStep(3)
+              }}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                step === s.n
+                  ? "bg-primary text-primary-foreground"
+                  : step > s.n
+                    ? "bg-primary/20 text-primary cursor-pointer hover:bg-primary/30"
+                    : "bg-muted text-muted-foreground"
+              }`}
+            >
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[11px]">
+                {step > s.n ? "✓" : s.n}
+              </span>
+              <span className="hidden sm:inline">{s.label}</span>
+            </button>
           </div>
         ))}
       </div>
@@ -367,7 +388,7 @@ export default function NewContractPage() {
                 disabled={saving}
                 className="flex-1"
               >
-                {saving ? "Đang lưu..." : "Xác nhận & Lưu"}
+                {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang lưu...</> : "Xác nhận & Lưu"}
               </Button>
             </div>
           </CardContent>
